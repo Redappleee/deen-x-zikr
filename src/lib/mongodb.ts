@@ -12,7 +12,14 @@ export function getMongoClientPromise(): Promise<MongoClient> {
   }
 
   if (!global.mongoClientPromise) {
-    const client = new MongoClient(uri);
+    const client = new MongoClient(uri, {
+      tls: true,
+      family: 4,
+      serverSelectionTimeoutMS: 15_000,
+      connectTimeoutMS: 15_000,
+      socketTimeoutMS: 20_000,
+      maxPoolSize: 10
+    });
     global.mongoClientPromise = client.connect();
   }
 
