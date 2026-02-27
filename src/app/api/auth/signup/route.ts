@@ -26,15 +26,32 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const client = await getMongoClientPromise();
     const db = client.db();
 
-    const existing = await db.collection("users").findOne({ email: parsed.data.email.toLowerCase() });
-    if (existing) {
+    const email = parsed.data.email.toLowerCase();
+    const existing = await db.collection("users").findOne<{ passwordHash?: string; name?: string }>({ email });
+
+    if (existing?.passwordHash) {
       return NextResponse.json({ error: "Email already in use" }, { status: 409 });
     }
 
     const passwordHash = await hash(parsed.data.password, 12);
+    if (existing) {
+      // Existing social-auth user: attach credentials so email/password login can work too.
+      await db.collection("users").updateOne(
+        { email },
+        {
+          $set: {
+            passwordHash,
+            name: existing.name ?? parsed.data.name,
+            updatedAt: new Date()
+          }
+        }
+      );
+      return NextResponse.json({ success: true, credentialsLinked: true });
+    }
+
     await db.collection("users").insertOne({
       name: parsed.data.name,
-      email: parsed.data.email.toLowerCase(),
+      email,
       passwordHash,
       emailVerified: null,
       createdAt: new Date()
