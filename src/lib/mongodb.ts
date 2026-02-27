@@ -20,7 +20,12 @@ export function getMongoClientPromise(): Promise<MongoClient> {
       socketTimeoutMS: 20_000,
       maxPoolSize: 10
     });
-    global.mongoClientPromise = client.connect();
+    global.mongoClientPromise = client.connect().catch(async (error) => {
+      // Avoid permanently caching a rejected connection promise.
+      global.mongoClientPromise = undefined;
+      await client.close().catch(() => undefined);
+      throw error;
+    });
   }
 
   return global.mongoClientPromise;
