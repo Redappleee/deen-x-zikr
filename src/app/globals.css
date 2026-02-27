@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --app-bg: #f7f2e8;
+  --app-header: rgba(247, 242, 232, 0.95);
+  --ramadan-glow: rgba(212, 175, 106, 0.28);
+  --lantern-glow: rgba(249, 214, 139, 0.28);
+}
+
+.dark {
+  color-scheme: dark;
+  --app-bg: #121512;
+  --app-header: rgba(18, 21, 18, 0.95);
+  --ramadan-glow: rgba(212, 175, 106, 0.16);
+  --lantern-glow: rgba(212, 175, 106, 0.2);
+}
+
+.ramadan {
+  --app-bg: #f4ebd8;
+  --app-header: rgba(244, 235, 216, 0.95);
+  --ramadan-glow: rgba(181, 142, 72, 0.35);
+}
+
+.dark.ramadan {
+  --app-bg: #101a12;
+  --app-header: rgba(16, 26, 18, 0.95);
+  --ramadan-glow: rgba(212, 175, 106, 0.2);
+}
+
+.ramadan.ramadan-night {
+  --app-bg: #efe0c2;
+  --app-header: rgba(230, 213, 184, 0.96);
+}
+
+.dark.ramadan.ramadan-night {
+  --app-bg: #0b130e;
+  --app-header: rgba(11, 19, 14, 0.96);
+  --ramadan-glow: rgba(212, 175, 106, 0.26);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--app-bg);
+  transition: background-color 0.6s ease, color 0.6s ease;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(15, 157, 88, 0.5) transparent;
+}
+
+header,
+.theme-surface {
+  transition:
+    background-color 0.6s ease,
+    border-color 0.6s ease,
+    color 0.6s ease,
+    box-shadow 0.6s ease,
+    transform 0.6s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,59 @@
+services:
+  - type: web
+    name: deen-x-zikr
+    runtime: node
+    plan: free
+    autoDeploy: true
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: NEXTAUTH_URL
+        sync: false
+      - key: NEXTAUTH_SECRET
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: NEXT_PUBLIC_ENABLE_EMAIL_MAGIC_LINK
+        value: "false"
+      - key: NEXT_PUBLIC_VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+      - key: APP_BASE_URL
+        sync: false
+
+  - type: cron
+    name: deen-x-zikr-prayer-reminders
+    runtime: node
+    schedule: "*/10 * * * *"
+    plan: free
+    buildCommand: npm install
+    startCommand: 'curl -fsS "$APP_BASE_URL/api/cron/prayer-reminders?secret=$CRON_SECRET"'
+    envVars:
+      - key: APP_BASE_URL
+        sync: false
+      - key: CRON_SECRET
+        sync: false

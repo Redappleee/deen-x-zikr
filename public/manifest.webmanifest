@@ -1,0 +1,23 @@
+{
+  "name": "Deen X Zikr",
+  "short_name": "DeenZikr",
+  "description": "Prayer times, Quran, Qibla, Hadith, and Daily Zikr in a calm Islamic web experience.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f2e8",
+  "theme_color": "#0f9d58",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
