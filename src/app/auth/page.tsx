@@ -9,7 +9,7 @@ import { useSearchParams } from "next/navigation";
 import { GlassCard } from "@/components/shared/glass-card";
 
 const BG_VIDEO_URL = "https://cdn.coverr.co/videos/coverr-crescent-moon-over-desert-1579/1080p.mp4";
-const AUTH_TIMEOUT_MS = 12_000;
+const AUTH_TIMEOUT_MS = 30_000;
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   return Promise.race([
@@ -17,7 +17,7 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): 
     new Promise<T>((_, reject) => {
       const timer = window.setTimeout(() => {
         window.clearTimeout(timer);
-        reject(new Error(`${label} timed out`));
+        reject(new Error(`${label} is taking too long. Please retry in a few seconds.`));
       }, timeoutMs);
     })
   ]);
