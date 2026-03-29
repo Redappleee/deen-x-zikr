@@ -3,6 +3,7 @@ export type PrayerTimings = {
   Sunrise: string;
   Dhuhr: string;
   Asr: string;
+  Sunset?: string;
   Maghrib: string;
   Isha: string;
 };
@@ -17,6 +18,21 @@ export type PrayerResponse = {
   hijri: string;
   latitude: number;
   longitude: number;
+  schools?: {
+    shafi: PrayerTimings;
+    hanafi: PrayerTimings;
+  };
+  prohibitedTimes?: {
+    sunrise?: { start: string; end: string };
+    noon?: { start: string; end: string };
+    sunset?: { start: string; end: string };
+  } | null;
+  qibla?: {
+    degrees: number | null;
+    from: string | null;
+    distanceKm: number | null;
+    distanceUnit: string | null;
+  } | null;
 };
 
 export type QuranAyah = {

@@ -40,8 +40,7 @@ function parsePrayerMinutes(timing: string | undefined): number | null {
 
 export async function getDuePrayerNotification(
   subscription: PushSubscriptionDoc,
-  now: Date,
-  windowMinutes = 10
+  now: Date
 ): Promise<{ key: string; prayer: string; startsInMinutes: number } | null> {
   const currentDate = formatDateInTimezone(now, subscription.timezone);
 
@@ -54,11 +53,14 @@ export async function getDuePrayerNotification(
   const nowMinutes = getMinutesInTimezone(now, subscription.timezone);
 
   for (const prayer of PRAYERS) {
+    if (subscription.prayerPrefs?.[prayer] === false) continue;
+
     const prayerMinutes = parsePrayerMinutes(payload.data.timings[prayer]);
     if (prayerMinutes === null) continue;
 
     const delta = prayerMinutes - nowMinutes;
-    if (delta < 0 || delta > windowMinutes) continue;
+    const leadMinutes = subscription.leadMinutes ?? 10;
+    if (delta < 0 || delta > leadMinutes) continue;
 
     return {
       key: `${currentDate}-${prayer}`,

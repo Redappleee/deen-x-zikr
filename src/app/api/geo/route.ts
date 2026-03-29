@@ -3,8 +3,13 @@ import { z } from "zod";
 import { isRateLimited } from "@/lib/rate-limit";
 import { cachedJson } from "@/lib/server-fetch";
 
-const querySchema = z.object({
+const searchSchema = z.object({
   q: z.string().min(2).max(100)
+});
+
+const reverseSchema = z.object({
+  lat: z.coerce.number().min(-90).max(90),
+  lng: z.coerce.number().min(-180).max(180)
 });
 
 type NominatimResult = {
@@ -15,20 +20,55 @@ type NominatimResult = {
   type: string;
 };
 
+type NominatimReverseResult = {
+  place_id: number;
+  display_name: string;
+  lat: string;
+  lon: string;
+  addresstype?: string;
+};
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const ip = request.headers.get("x-forwarded-for") ?? "unknown";
   if (isRateLimited(`geo:${ip}`, 60, 60_000)) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
-  const parsed = querySchema.safeParse({ q: request.nextUrl.searchParams.get("q") ?? "" });
-  if (!parsed.success) {
+  const latParam = request.nextUrl.searchParams.get("lat");
+  const lngParam = request.nextUrl.searchParams.get("lng");
+
+  if (latParam !== null && lngParam !== null) {
+    const parsedReverse = reverseSchema.safeParse({ lat: latParam, lng: lngParam });
+    if (!parsedReverse.success) {
+      return NextResponse.json({ error: "Invalid reverse geo query" }, { status: 400 });
+    }
+
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=14&lat=${parsedReverse.data.lat}&lon=${parsedReverse.data.lng}`;
+      const data = await cachedJson<NominatimReverseResult>({ url, revalidate: 3_600, tags: ["geo"] });
+
+      return NextResponse.json({
+        result: {
+          id: data.place_id,
+          label: data.display_name,
+          lat: Number(data.lat),
+          lng: Number(data.lon),
+          type: data.addresstype ?? "gps"
+        }
+      });
+    } catch {
+      return NextResponse.json({ error: "Failed to reverse geocode location" }, { status: 502 });
+    }
+  }
+
+  const parsedSearch = searchSchema.safeParse({ q: request.nextUrl.searchParams.get("q") ?? "" });
+  if (!parsedSearch.success) {
     return NextResponse.json({ error: "Invalid query" }, { status: 400 });
   }
 
   try {
     const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=8&q=${encodeURIComponent(
-      parsed.data.q
+      parsedSearch.data.q
     )}`;
     const data = await cachedJson<NominatimResult[]>({ url, revalidate: 3_600, tags: ["geo"] });
 

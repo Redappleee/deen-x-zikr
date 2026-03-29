@@ -1,10 +1,14 @@
 import { Header } from "@/components/layout/header";
+import { NotificationPreferenceSync } from "@/components/layout/notification-preference-sync";
 import { RamadanExperience } from "@/components/layout/ramadan-experience";
 import { RamadanTimingBanner } from "@/components/layout/ramadan-timing-banner";
+import { WelcomeIntro } from "@/components/layout/welcome-intro";
 
 export function AppShell({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--app-bg)] text-slate-900 dark:text-slate-100">
+      <WelcomeIntro />
+      <NotificationPreferenceSync />
       <div className="pointer-events-none absolute inset-0 bg-islamic-pattern [background-size:22px_22px] opacity-40 dark:opacity-20" />
       <div className="pointer-events-none absolute -left-24 top-16 h-80 w-80 animate-float rounded-full bg-emerald-200/40 blur-3xl dark:bg-emerald-900/30" />
       <div className="pointer-events-none absolute -right-24 top-44 h-80 w-80 animate-float rounded-full bg-gold-200/30 blur-3xl [animation-delay:1.5s] dark:bg-gold-600/10" />

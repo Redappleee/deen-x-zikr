@@ -12,9 +12,29 @@ export function getHijriDate(date = new Date()): string {
   }).format(date);
 }
 
+function getTimeParts(raw: string): { hours: number; minutes: number; meridiem: "AM" | "PM" | null } | null {
+  const match = raw.trim().replace(/\s*\([^)]*\)\s*/g, "").match(/^(\d{1,2}):(\d{2})(?:\s*([APap][Mm]))?/);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    hours: Number(match[1]),
+    minutes: Number(match[2]),
+    meridiem: match[3] ? (match[3].toUpperCase() as "AM" | "PM") : null
+  };
+}
+
 export function toTimeLabel(raw: string): string {
-  const [time] = raw.split(" ");
-  return time;
+  const parts = getTimeParts(raw);
+  if (!parts) {
+    return raw;
+  }
+
+  const meridiem = parts.meridiem ?? (parts.hours >= 12 ? "PM" : "AM");
+  const normalizedHours = parts.hours % 12 || 12;
+
+  return `${normalizedHours}:${String(parts.minutes).padStart(2, "0")} ${meridiem}`;
 }
 
 export function secondsBetween(now: Date, target: Date): number {
@@ -29,8 +49,20 @@ export function formatSeconds(total: number): string {
 }
 
 export function parsePrayerDateTime(date: string, time: string): Date {
-  const normalizedTime = time.split(" ")[0];
-  return new Date(`${date}T${normalizedTime}:00`);
+  const parts = getTimeParts(time);
+  if (!parts) {
+    return new Date(`${date}T00:00:00`);
+  }
+
+  let hours = parts.hours;
+  if (parts.meridiem === "PM" && hours < 12) {
+    hours += 12;
+  }
+  if (parts.meridiem === "AM" && hours === 12) {
+    hours = 0;
+  }
+
+  return new Date(`${date}T${String(hours).padStart(2, "0")}:${String(parts.minutes).padStart(2, "0")}:00`);
 }
 
 export function getProgressPercent(start: Date, end: Date, now = new Date()): number {
@@ -55,9 +87,21 @@ export function getDateKeyFromOffset(baseDate: Date, offsetDays: number): string
 }
 
 export function parseTimeToday(raw: string, now = new Date()): Date {
-  const [time] = raw.split(" ");
-  const [hours, minutes] = time.split(":").map(Number);
+  const parts = getTimeParts(raw);
   const date = new Date(now);
-  date.setHours(hours, minutes, 0, 0);
+  if (!parts) {
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }
+
+  let hours = parts.hours;
+  if (parts.meridiem === "PM" && hours < 12) {
+    hours += 12;
+  }
+  if (parts.meridiem === "AM" && hours === 12) {
+    hours = 0;
+  }
+
+  date.setHours(hours, parts.minutes, 0, 0);
   return date;
 }

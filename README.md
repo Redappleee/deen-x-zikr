@@ -54,8 +54,11 @@ Required for auth-enabled production:
 - `NEXTAUTH_SECRET`
 - `NEXTAUTH_URL`
 - `MONGODB_URI`
+- `MONGODB_DB` (example: `deenxzikr`)
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
+- `GEOAPIFY_API_KEY`
+- `ISLAMIC_API_KEY`
 
 Optional for email verification/magic links:
 - `SMTP_HOST`
@@ -91,6 +94,14 @@ npm run typecheck
 npm run lint
 npm run build
 ```
+
+Provider notes:
+- Prayer times and qibla use `IslamicAPI` when `ISLAMIC_API_KEY` is set.
+- Nearby mosque lookup uses `Geoapify Places API` when `GEOAPIFY_API_KEY` is set, with OpenStreetMap fallback.
+
+MongoDB notes:
+- Use a URI with a database path: `mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/deenxzikr?retryWrites=true&w=majority`
+- On Render, also set `MONGODB_DB=deenxzikr`
 
 ## Vercel Deployment Guide
 

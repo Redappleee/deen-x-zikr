@@ -30,3 +30,7 @@ export function getMongoClientPromise(): Promise<MongoClient> {
 
   return global.mongoClientPromise;
 }
+
+export function getMongoDbName(): string {
+  return process.env.MONGODB_DB || "deenxzikr";
+}

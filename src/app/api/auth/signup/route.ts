@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { z } from "zod";
-import { getMongoClientPromise } from "@/lib/mongodb";
+import { getMongoClientPromise, getMongoDbName } from "@/lib/mongodb";
 import { isRateLimited } from "@/lib/rate-limit";
 
 const schema = z.object({
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   try {
     const client = await getMongoClientPromise();
-    const db = client.db();
+    const db = client.db(getMongoDbName());
 
     const email = parsed.data.email.toLowerCase();
     const existing = await db.collection("users").findOne<{ passwordHash?: string; name?: string }>({ email });

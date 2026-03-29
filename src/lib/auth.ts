@@ -3,9 +3,10 @@ import type { Provider } from "next-auth/providers";
 import Credentials from "next-auth/providers/credentials";
 import Email from "next-auth/providers/nodemailer";
 import Google from "next-auth/providers/google";
+import { MongoDBAdapter } from "@auth/mongodb-adapter";
 import { compare } from "bcryptjs";
 import { z } from "zod";
-import { getMongoClientPromise } from "@/lib/mongodb";
+import { getMongoClientPromise, getMongoDbName } from "@/lib/mongodb";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -45,7 +46,7 @@ const providers: Provider[] = [
         }
 
         const client = await getMongoWithTimeout();
-        const db = client.db();
+        const db = client.db(getMongoDbName());
         const user = await db.collection("users").findOne<{ _id: string; email: string; passwordHash?: string; name?: string }>({
           email: parsed.data.email.toLowerCase()
         });
@@ -98,6 +99,11 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  adapter: hasDatabase
+    ? MongoDBAdapter(() => getMongoClientPromise(), {
+        databaseName: getMongoDbName()
+      })
+    : undefined,
   trustHost: true,
   debug: process.env.NODE_ENV !== "production",
   session: {

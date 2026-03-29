@@ -35,7 +35,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   for (const subscription of subscriptions) {
     try {
-      const due = await getDuePrayerNotification(subscription, new Date(), 10);
+      const due = await getDuePrayerNotification(subscription, new Date());
       if (!due) {
         skipped += 1;
         continue;

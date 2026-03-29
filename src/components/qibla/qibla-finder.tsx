@@ -18,6 +18,8 @@ function bearingToDirection(value: number): string {
 
 export function QiblaFinder(): React.JSX.Element {
   const [coords, setCoords] = useState<Coords | null>(null);
+  const [bearing, setBearing] = useState<number | null>(null);
+  const [qiblaDistanceKm, setQiblaDistanceKm] = useState<number | null>(null);
   const [heading, setHeading] = useState(0);
   const [hasLiveCompass, setHasLiveCompass] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,9 +94,33 @@ export function QiblaFinder(): React.JSX.Element {
     };
   }, []);
 
-  const bearing = useMemo(() => {
-    if (!coords) return null;
-    return calculateQiblaBearing(coords.lat, coords.lng);
+  useEffect(() => {
+    if (!coords) {
+      setBearing(null);
+      setQiblaDistanceKm(null);
+      return;
+    }
+
+    const fallbackBearing = calculateQiblaBearing(coords.lat, coords.lng);
+    setBearing(fallbackBearing);
+
+    fetch(`/api/qibla?lat=${coords.lat}&lng=${coords.lng}`)
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error("Qibla service unavailable");
+        }
+        return res.json();
+      })
+      .then((json: { degrees?: number; distanceKm?: number | null }) => {
+        if (typeof json.degrees === "number") {
+          setBearing(json.degrees);
+        }
+        setQiblaDistanceKm(typeof json.distanceKm === "number" ? json.distanceKm : null);
+      })
+      .catch(() => {
+        setBearing(fallbackBearing);
+        setQiblaDistanceKm(null);
+      });
   }, [coords]);
 
   const dialRotation = bearing !== null ? bearing - heading : 0;
@@ -255,6 +281,7 @@ export function QiblaFinder(): React.JSX.Element {
             Precision Tip
           </p>
           <p className="mt-2 text-slate-600 dark:text-slate-300">Avoid nearby magnets, metal cases, or strong electrical devices for better accuracy.</p>
+          {qiblaDistanceKm !== null ? <p className="mt-2 text-slate-600 dark:text-slate-300">Distance to Makkah: {qiblaDistanceKm.toFixed(0)} km</p> : null}
         </div>
 
         {error ? <p className="mt-4 text-sm text-red-600 dark:text-red-300">{error}</p> : null}

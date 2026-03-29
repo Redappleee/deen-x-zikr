@@ -42,6 +42,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           locationName: parsed.data.locationName,
           timezone: parsed.data.timezone,
           language: parsed.data.language,
+          leadMinutes: parsed.data.leadMinutes,
+          prayerPrefs: parsed.data.prayerPrefs,
           active: true,
           updatedAt: now
         },

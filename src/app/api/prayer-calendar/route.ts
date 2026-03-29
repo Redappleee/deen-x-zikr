@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { buildIslamicApiPrayerUrl, hasIslamicApiKey } from "@/lib/islamic-api";
 import { isRateLimited } from "@/lib/rate-limit";
 import { cachedJson } from "@/lib/server-fetch";
 
@@ -15,6 +16,15 @@ type CalendarResponse = {
   data: Array<{
     date: { gregorian: { date: string; day: string } };
     timings: Record<string, string>;
+  }>;
+};
+
+type IslamicApiMonthResponse = {
+  code: number;
+  status: string;
+  data: Array<{
+    date: string;
+    times: Record<string, string>;
   }>;
 };
 
@@ -37,9 +47,34 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const { lat, lng, month, year, method } = parsed.data;
-  const url = `https://api.aladhan.com/v1/calendar/${year}/${month}?latitude=${lat}&longitude=${lng}&method=${method}`;
 
   try {
+    if (hasIslamicApiKey()) {
+      const payload = await cachedJson<IslamicApiMonthResponse>({
+        url: buildIslamicApiPrayerUrl({
+          lat,
+          lng,
+          method,
+          date: `${year}-${String(month).padStart(2, "0")}`
+        }),
+        revalidate: 7_200,
+        tags: ["prayer-calendar"]
+      });
+
+      const days = payload.data.map((day) => ({
+        date: day.date,
+        day: day.date.slice(-2),
+        fajr: day.times.Fajr,
+        dhuhr: day.times.Dhuhr,
+        asr: day.times.Asr,
+        maghrib: day.times.Maghrib,
+        isha: day.times.Isha
+      }));
+
+      return NextResponse.json({ days });
+    }
+
+    const url = `https://api.aladhan.com/v1/calendar/${year}/${month}?latitude=${lat}&longitude=${lng}&method=${method}`;
     const payload = await cachedJson<CalendarResponse>({ url, revalidate: 7_200, tags: ["prayer-calendar"] });
     const days = payload.data.map((d) => ({
       date: d.date.gregorian.date,

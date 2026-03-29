@@ -6,7 +6,7 @@ export default function HadithPage(): React.JSX.Element {
     <div>
       <SectionHeading
         title="Wisdom of the Prophet ﷺ"
-        subtitle="Read and save hadith from major collections with category filters and daily reflections."
+        subtitle="A fuller hadith reading experience with daily wisdom, search, saved hadith, collection browsing, and shareable reflections."
       />
       <HadithLibrary />
     </div>

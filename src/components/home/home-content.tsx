@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { signIn, useSession } from "next-auth/react";
 import {
+  ArrowRight,
   BookMarked,
   BookOpenText,
   CalendarClock,
@@ -13,6 +14,7 @@ import {
   Compass,
   Flame,
   Heart,
+  LibraryBig,
   MapPin,
   Minus,
   MoonStar,
@@ -23,9 +25,11 @@ import {
   Wallet
 } from "lucide-react";
 import { GlassCard } from "@/components/shared/glass-card";
+import { SetupFlow } from "@/components/home/setup-flow";
 import { PRAYER_NAMES } from "@/lib/constants";
 import { daysUntilHijriDate, getHijriParts } from "@/lib/ramadan";
-import { formatSeconds, getHijriDate, getLocalDateKey, getProgressPercent, parseTimeToday, secondsBetween, toTimeLabel } from "@/lib/utils";
+import { formatSeconds, getDateKeyFromOffset, getHijriDate, getLocalDateKey, getProgressPercent, parseTimeToday, secondsBetween, toTimeLabel } from "@/lib/utils";
+import { TRACKED_PRAYER_NAMES } from "@/store/use-app-store";
 import { useAppStore } from "@/store/use-app-store";
 
 type PrayerPayload = {
@@ -107,6 +111,14 @@ function getEvents(now: Date): Array<{ label: string; subtitle: string }> {
   ];
 }
 
+function getTimeOfDayLabel(now: Date): string {
+  const hour = now.getHours();
+  if (hour < 12) return "Morning";
+  if (hour < 17) return "Afternoon";
+  if (hour < 21) return "Evening";
+  return "Night";
+}
+
 export function HomeContent(): React.JSX.Element {
   const { data: session } = useSession();
 
@@ -127,6 +139,7 @@ export function HomeContent(): React.JSX.Element {
 
   const prayersCompletedToday = useAppStore((state) => state.prayersCompletedToday);
   const adjustPrayersCompleted = useAppStore((state) => state.adjustPrayersCompleted);
+  const prayerCompletionByDate = useAppStore((state) => state.prayerCompletionByDate);
 
   const quranGoalPagesDaily = useAppStore((state) => state.quranGoalPagesDaily);
   const quranPagesReadToday = useAppStore((state) => state.quranPagesReadToday);
@@ -154,6 +167,7 @@ export function HomeContent(): React.JSX.Element {
   });
 
   const todayKey = getLocalDateKey(now);
+  const todayPrayerCompletion = prayerCompletionByDate[todayKey];
 
   useEffect(() => {
     const secondTimer = window.setInterval(() => setNow(new Date()), 1000);
@@ -265,10 +279,102 @@ export function HomeContent(): React.JSX.Element {
   const prayerTargetReached = prayersCompletedToday >= 5;
   const quranTargetReached = quranPagesReadToday >= quranGoalPagesDaily;
   const dhikrTargetReached = zikrCountToday >= 100;
+  const prayerCompletionPercent = Math.min((prayersCompletedToday / 5) * 100, 100);
+  const quranCompletionPercent = Math.min((quranPagesReadToday / Math.max(quranGoalPagesDaily, 1)) * 100, 100);
+  const dhikrCompletionPercent = Math.min((zikrCountToday / 100) * 100, 100);
+  const prayerRingCircumference = 2 * Math.PI * 36;
 
   const quranSurah = surahs.find((surah) => surah.number === (lastReadSurah ?? 1));
 
   const events = useMemo(() => getEvents(now), [now]);
+  const weeklyPrayerHistory = useMemo(() => {
+    return Array.from({ length: 7 }, (_, index) => {
+      const key = getDateKeyFromOffset(now, -(6 - index));
+      const completed = TRACKED_PRAYER_NAMES.filter((prayer) => prayerCompletionByDate[key]?.[prayer]).length;
+      return {
+        key,
+        label: new Date(`${key}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" }),
+        completed
+      };
+    });
+  }, [now, prayerCompletionByDate]);
+  const weeklyIbadahHistory = useMemo(() => {
+    return Array.from({ length: 7 }, (_, index) => {
+      const key = getDateKeyFromOffset(now, -(6 - index));
+      const day = ibadahByDate[key];
+      const completed = day ? Number(day.fajrOnTime) + Number(day.readQuran) + Number(day.makeDua) + Number(day.charity) : 0;
+      return {
+        key,
+        label: new Date(`${key}T12:00:00`).toLocaleDateString("en-US", { weekday: "short" }),
+        completed
+      };
+    });
+  }, [ibadahByDate, now]);
+  const weeklyPrayerRate = useMemo(() => {
+    const total = weeklyPrayerHistory.reduce((sum, day) => sum + day.completed, 0);
+    return Math.round((total / (weeklyPrayerHistory.length * 5)) * 100);
+  }, [weeklyPrayerHistory]);
+  const weeklyIbadahRate = useMemo(() => {
+    const total = weeklyIbadahHistory.reduce((sum, day) => sum + day.completed, 0);
+    return Math.round((total / (weeklyIbadahHistory.length * 4)) * 100);
+  }, [weeklyIbadahHistory]);
+  const focusCard = useMemo(() => {
+    if (!preferredLocation || !nextPrayer) {
+      return {
+        title: "Complete your setup",
+        description: "Set your location so Home can guide your salah rhythm, reminders, and daily focus.",
+        href: "/salah",
+        cta: "Open Salah Center"
+      };
+    }
+
+    if (prayersCompletedToday < 5) {
+      return {
+        title: `${nextPrayer.name} is your next anchor`,
+        description: `You're in the ${getTimeOfDayLabel(now).toLowerCase()} stretch. Prepare for ${nextPrayer.name} and keep today's prayer chain strong.`,
+        href: "/salah",
+        cta: `Go to ${nextPrayer.name}`
+      };
+    }
+
+    if (quranPagesReadToday < quranGoalPagesDaily) {
+      return {
+        title: "Continue your Quran goal",
+        description: `You have read ${quranPagesReadToday}/${quranGoalPagesDaily} pages today. A small session now keeps the habit steady.`,
+        href: "/quran",
+        cta: "Resume Quran"
+      };
+    }
+
+    if (zikrCountToday < 100) {
+      return {
+        title: "Finish your dhikr cycle",
+        description: `You are at ${zikrCountToday}/100 dhikr today. A short tasbih session will complete the day's remembrance goal.`,
+        href: "/zikr",
+        cta: "Open Zikr Tools"
+      };
+    }
+
+    return {
+      title: "Your essentials are in place",
+      description: "Prayer, Quran, and dhikr are on track. Use this calm window for dua, reflection, or reviewing saved reminders.",
+      href: "/dashboard",
+      cta: "Open Dashboard"
+    };
+  }, [nextPrayer, now, preferredLocation, prayersCompletedToday, quranGoalPagesDaily, quranPagesReadToday, zikrCountToday]);
+  const quickActions = useMemo(
+    () => [
+      { href: "/salah", label: "Salah Center", icon: Clock3, hint: preferredLocation ? preferredLocation.label : "Set location" },
+      { href: "/quran", label: "Quran Reader", icon: BookOpenText, hint: `Surah ${quranSurah?.englishName ?? lastReadSurah ?? 1}` },
+      { href: "/quran/para", label: "Para Quran", icon: LibraryBig, hint: "Word by word" },
+      { href: "/hadith", label: "Hadith Library", icon: Sparkles, hint: `${favoriteHadith.length} saved` },
+      { href: "/zikr", label: "Zikr Tools", icon: Heart, hint: `${zikrCountToday} today` },
+      { href: "/qibla", label: "Qibla", icon: Compass, hint: "Direction & map" },
+      { href: "/calendar", label: "Islamic Calendar", icon: CalendarClock, hint: getHijriDate(now) },
+      { href: "/dashboard", label: "Dashboard", icon: Wallet, hint: session?.user ? "Your account" : "Sign in" }
+    ],
+    [favoriteHadith.length, lastReadSurah, now, preferredLocation, quranSurah?.englishName, session?.user, zikrCountToday]
+  );
 
   const greetingName = session?.user?.name?.split(" ")[0] || "Believer";
   const isAyahSaved = Boolean(
@@ -296,6 +402,8 @@ export function HomeContent(): React.JSX.Element {
 
   return (
     <div className="space-y-6">
+      <SetupFlow />
+
       <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
         <GlassCard className="overflow-hidden bg-gradient-to-br from-emerald-50/85 to-surface dark:from-dark-800 dark:to-dark-900">
           <p className="text-xs uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-300">Spiritual Dashboard</p>
@@ -348,6 +456,113 @@ export function HomeContent(): React.JSX.Element {
         </GlassCard>
       </section>
 
+      <section className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+        <GlassCard className="relative flex h-full flex-col justify-between overflow-hidden bg-[linear-gradient(135deg,rgba(255,248,232,0.94),rgba(243,251,244,0.94))] dark:bg-[linear-gradient(135deg,rgba(46,36,18,0.22),rgba(10,36,25,0.32))]">
+          <div className="pointer-events-none absolute -right-10 top-8 h-36 w-36 rounded-full bg-gold-200/20 blur-3xl dark:bg-gold-500/10" />
+          <div className="pointer-events-none absolute -left-8 bottom-8 h-32 w-32 rounded-full bg-emerald-200/20 blur-3xl dark:bg-emerald-500/10" />
+
+          <div className="relative">
+            <p className="text-xs uppercase tracking-[0.2em] text-gold-700 dark:text-gold-200">Focus Now</p>
+            <h2 className="mt-3 text-2xl font-semibold text-slate-900 dark:text-slate-100">{focusCard.title}</h2>
+            <p className="mt-2 max-w-xl text-sm text-slate-600 dark:text-slate-300">{focusCard.description}</p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Link className="inline-flex items-center gap-2 rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-medium text-white" href={focusCard.href}>
+                {focusCard.cta}
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+              <Link className="rounded-full border border-gold-300 px-5 py-2.5 text-sm text-gold-700 dark:border-gold-700/40 dark:text-gold-200" href="/calendar">
+                Open Today&apos;s Calendar
+              </Link>
+            </div>
+          </div>
+
+          <div className="relative mt-8 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-3xl border border-emerald-100/70 bg-white/65 p-4 backdrop-blur dark:border-emerald-900/40 dark:bg-dark-800/45">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Next Prayer</p>
+              <p className="mt-2 text-lg font-semibold text-emerald-800 dark:text-emerald-100">{nextPrayer?.name ?? "Setup needed"}</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{nextPrayer ? nextPrayer.timeLabel : "Choose a location first"}</p>
+            </div>
+            <div className="rounded-3xl border border-emerald-100/70 bg-white/65 p-4 backdrop-blur dark:border-emerald-900/40 dark:bg-dark-800/45">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Quran Today</p>
+              <p className="mt-2 text-lg font-semibold text-emerald-800 dark:text-emerald-100">{quranPagesReadToday}/{quranGoalPagesDaily}</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">pages toward your daily goal</p>
+            </div>
+            <div className="rounded-3xl border border-gold-200/70 bg-white/65 p-4 backdrop-blur dark:border-gold-700/20 dark:bg-dark-800/45">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Dhikr Today</p>
+              <p className="mt-2 text-lg font-semibold text-gold-700 dark:text-gold-200">{zikrCountToday}</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{Math.max(0, 100 - zikrCountToday)} left to 100</p>
+            </div>
+          </div>
+        </GlassCard>
+
+        <GlassCard>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-300">Weekly Consistency</p>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">See how your salah and ibadah rhythm has looked across the last 7 days.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <div className="rounded-full border border-emerald-100 px-3 py-1.5 text-xs text-emerald-700 dark:border-emerald-900/40 dark:text-emerald-200">
+                Salah {weeklyPrayerRate}%
+              </div>
+              <div className="rounded-full border border-gold-300/50 px-3 py-1.5 text-xs text-gold-700 dark:border-gold-700/30 dark:text-gold-200">
+                Ibadah {weeklyIbadahRate}%
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-5">
+            <div className="rounded-3xl border border-emerald-100/70 bg-white/70 p-4 dark:border-emerald-900/40 dark:bg-dark-800/60">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Prayer Completion</p>
+                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Your last 7 days of salah completion.</p>
+                </div>
+                <div className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-800 dark:bg-emerald-900/35 dark:text-emerald-100">
+                  {weeklyPrayerRate}% consistent
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7">
+                {weeklyPrayerHistory.map((day) => (
+                  <div className="rounded-2xl border border-emerald-100/70 bg-white/80 p-3 text-center dark:border-emerald-900/30 dark:bg-dark-900/35" key={day.key}>
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{day.label}</p>
+                    <p className="mt-2 text-lg font-semibold text-emerald-800 dark:text-emerald-100">{day.completed}/5</p>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-emerald-100 dark:bg-emerald-900/40">
+                      <div className="h-full rounded-full bg-emerald-500" style={{ width: `${(day.completed / 5) * 100}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-gold-200/70 bg-white/70 p-4 dark:border-gold-700/20 dark:bg-dark-800/60">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Daily Ibadah Checklist</p>
+                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">A weekly view of your challenge habits and consistency.</p>
+                </div>
+                <div className="rounded-full bg-gold-100 px-3 py-1 text-xs font-medium text-gold-700 dark:bg-gold-700/15 dark:text-gold-200">
+                  {weeklyIbadahRate}% consistent
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7">
+                {weeklyIbadahHistory.map((day) => (
+                  <div className="rounded-2xl border border-gold-200/70 bg-white/80 p-3 text-center dark:border-gold-700/20 dark:bg-dark-900/35" key={day.key}>
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{day.label}</p>
+                    <p className="mt-2 text-lg font-semibold text-gold-700 dark:text-gold-200">{day.completed}/4</p>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gold-100 dark:bg-gold-900/20">
+                      <div className="h-full rounded-full bg-gold-500" style={{ width: `${(day.completed / 4) * 100}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </GlassCard>
+      </section>
+
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <GlassCard className="relative overflow-hidden p-4">
           <AnimatePresence>
@@ -365,8 +580,44 @@ export function HomeContent(): React.JSX.Element {
             ) : null}
           </AnimatePresence>
           <p className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Prayers Completed</p>
-          <p className="mt-2 text-2xl font-semibold text-emerald-800 dark:text-emerald-100">{prayersCompletedToday}/5</p>
-          <div className="mt-3 flex items-center gap-2">
+          <div className="mt-3 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-2xl font-semibold text-emerald-800 dark:text-emerald-100">{prayersCompletedToday}/5</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Mark each salah as you complete it today.</p>
+            </div>
+            <motion.div
+              animate={prayerTargetReached ? { scale: [1, 1.05, 1] } : { scale: 1 }}
+              className="relative h-24 w-24 shrink-0"
+              transition={{ duration: 0.8, ease: "easeOut" }}
+            >
+              <svg className="h-24 w-24 -rotate-90" viewBox="0 0 88 88">
+                <circle className="stroke-emerald-100/90 dark:stroke-emerald-950" cx="44" cy="44" fill="none" r="36" strokeWidth="8" />
+                <motion.circle
+                  animate={{ strokeDashoffset: prayerRingCircumference - (prayerRingCircumference * prayerCompletionPercent) / 100 }}
+                  className="stroke-emerald-500"
+                  cx="44"
+                  cy="44"
+                  fill="none"
+                  r="36"
+                  strokeDasharray={prayerRingCircumference}
+                  strokeLinecap="round"
+                  strokeWidth="8"
+                  transition={{ duration: 0.55, ease: "easeOut" }}
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                <motion.p
+                  animate={prayerTargetReached ? { scale: [1, 1.08, 1] } : { scale: 1 }}
+                  className="text-xl font-semibold text-emerald-900 dark:text-emerald-100"
+                  transition={{ duration: 0.65, ease: "easeOut" }}
+                >
+                  {prayersCompletedToday}
+                </motion.p>
+                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">of 5</p>
+              </div>
+            </motion.div>
+          </div>
+          <div className="mt-4 flex items-center gap-2">
             <button
               className={glassCounterButtonClass}
               disabled={prayersCompletedToday <= 0}
@@ -383,6 +634,23 @@ export function HomeContent(): React.JSX.Element {
             >
               <Plus className="h-4 w-4" />
             </button>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {TRACKED_PRAYER_NAMES.map((prayer) => {
+              const completed = todayPrayerCompletion?.[prayer] ?? false;
+              return (
+                <span
+                  className={`rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${
+                    completed
+                      ? "border-emerald-300/70 bg-emerald-100/80 text-emerald-800 dark:border-emerald-700/60 dark:bg-emerald-900/45 dark:text-emerald-100"
+                      : "border-slate-200/80 bg-white/55 text-slate-500 dark:border-slate-700/70 dark:bg-slate-900/35 dark:text-slate-300"
+                  }`}
+                  key={prayer}
+                >
+                  {prayer}
+                </span>
+              );
+            })}
           </div>
         </GlassCard>
         <GlassCard className="relative overflow-hidden p-4">
@@ -401,8 +669,44 @@ export function HomeContent(): React.JSX.Element {
             ) : null}
           </AnimatePresence>
           <p className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Quran Progress</p>
-          <p className="mt-2 text-2xl font-semibold text-emerald-800 dark:text-emerald-100">{quranPagesReadToday}/{quranGoalPagesDaily}</p>
-          <div className="mt-3 flex items-center gap-2">
+          <div className="mt-3 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-2xl font-semibold text-emerald-800 dark:text-emerald-100">{quranPagesReadToday}/{quranGoalPagesDaily}</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Track today&apos;s reading against your daily goal.</p>
+            </div>
+            <motion.div
+              animate={quranTargetReached ? { scale: [1, 1.05, 1] } : { scale: 1 }}
+              className="relative h-24 w-24 shrink-0"
+              transition={{ duration: 0.8, ease: "easeOut" }}
+            >
+              <svg className="h-24 w-24 -rotate-90" viewBox="0 0 88 88">
+                <circle className="stroke-emerald-100/90 dark:stroke-emerald-950" cx="44" cy="44" fill="none" r="36" strokeWidth="8" />
+                <motion.circle
+                  animate={{ strokeDashoffset: prayerRingCircumference - (prayerRingCircumference * quranCompletionPercent) / 100 }}
+                  className="stroke-emerald-500"
+                  cx="44"
+                  cy="44"
+                  fill="none"
+                  r="36"
+                  strokeDasharray={prayerRingCircumference}
+                  strokeLinecap="round"
+                  strokeWidth="8"
+                  transition={{ duration: 0.55, ease: "easeOut" }}
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                <motion.p
+                  animate={quranTargetReached ? { scale: [1, 1.08, 1] } : { scale: 1 }}
+                  className="text-xl font-semibold text-emerald-900 dark:text-emerald-100"
+                  transition={{ duration: 0.65, ease: "easeOut" }}
+                >
+                  {quranPagesReadToday}
+                </motion.p>
+                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">pages</p>
+              </div>
+            </motion.div>
+          </div>
+          <div className="mt-4 flex items-center gap-2">
             <button
               className={glassCounterButtonClass}
               disabled={quranPagesReadToday <= 0}
@@ -432,8 +736,44 @@ export function HomeContent(): React.JSX.Element {
             ) : null}
           </AnimatePresence>
           <p className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Dhikr Count</p>
-          <p className="mt-2 text-2xl font-semibold text-emerald-800 dark:text-emerald-100">{zikrCountToday}</p>
-          <div className="mt-3 flex items-center gap-2">
+          <div className="mt-3 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-2xl font-semibold text-emerald-800 dark:text-emerald-100">{zikrCountToday}</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Build toward your 100-count daily dhikr target.</p>
+            </div>
+            <motion.div
+              animate={dhikrTargetReached ? { scale: [1, 1.05, 1] } : { scale: 1 }}
+              className="relative h-24 w-24 shrink-0"
+              transition={{ duration: 0.8, ease: "easeOut" }}
+            >
+              <svg className="h-24 w-24 -rotate-90" viewBox="0 0 88 88">
+                <circle className="stroke-gold-100/90 dark:stroke-gold-950/50" cx="44" cy="44" fill="none" r="36" strokeWidth="8" />
+                <motion.circle
+                  animate={{ strokeDashoffset: prayerRingCircumference - (prayerRingCircumference * dhikrCompletionPercent) / 100 }}
+                  className="stroke-gold-500"
+                  cx="44"
+                  cy="44"
+                  fill="none"
+                  r="36"
+                  strokeDasharray={prayerRingCircumference}
+                  strokeLinecap="round"
+                  strokeWidth="8"
+                  transition={{ duration: 0.55, ease: "easeOut" }}
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                <motion.p
+                  animate={dhikrTargetReached ? { scale: [1, 1.08, 1] } : { scale: 1 }}
+                  className="text-xl font-semibold text-gold-700 dark:text-gold-100"
+                  transition={{ duration: 0.65, ease: "easeOut" }}
+                >
+                  {zikrCountToday}
+                </motion.p>
+                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">of 100</p>
+              </div>
+            </motion.div>
+          </div>
+          <div className="mt-4 flex items-center gap-2">
             <button
               className={glassCounterButtonClass}
               disabled={zikrCountToday <= 0}
@@ -468,6 +808,61 @@ export function HomeContent(): React.JSX.Element {
           <Link className="rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-medium text-white" href="/quran">
             Resume Reading
           </Link>
+        </GlassCard>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
+        <GlassCard>
+          <p className="text-xs uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-300">Your Library</p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-emerald-100/70 bg-white/70 p-4 dark:border-emerald-900/40 dark:bg-dark-800/60">
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Saved Ayahs</p>
+              <p className="mt-2 text-2xl font-semibold text-emerald-800 dark:text-emerald-100">{bookmarks.length}</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Bookmarks kept for reflection and review.</p>
+            </div>
+            <div className="rounded-2xl border border-gold-200/70 bg-white/70 p-4 dark:border-gold-700/20 dark:bg-dark-800/60">
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Saved Hadith</p>
+              <p className="mt-2 text-2xl font-semibold text-gold-700 dark:text-gold-200">{favoriteHadith.length}</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Collected reminders from the hadith library.</p>
+            </div>
+          </div>
+          <div className="mt-4 rounded-2xl border border-emerald-100/70 bg-white/70 p-4 dark:border-emerald-900/40 dark:bg-dark-800/60">
+            <p className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Reading Resume</p>
+            <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-slate-100">
+              Surah {quranSurah?.englishName ?? `#${lastReadSurah ?? 1}`} • Ayah {lastReadAyah ?? 1}
+            </p>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Pick up your last Quran reading point instantly.</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Link className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-medium text-white" href="/quran">
+                Resume Quran
+              </Link>
+              <Link className="rounded-full border border-emerald-100 px-4 py-2 text-sm text-emerald-700 dark:border-emerald-900/40 dark:text-emerald-200" href="/dashboard">
+                Open Dashboard
+              </Link>
+            </div>
+          </div>
+        </GlassCard>
+
+        <GlassCard>
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Expanded Quick Tools</p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {quickActions.map((action) => {
+              const Icon = action.icon;
+              return (
+                <Link
+                  className="rounded-2xl border border-emerald-100 bg-white/70 p-4 transition hover:shadow-aura dark:border-emerald-900/40 dark:bg-dark-800/60"
+                  href={action.href}
+                  key={action.label}
+                >
+                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 dark:bg-emerald-900/35 dark:text-emerald-200">
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <p className="mt-4 text-sm font-medium text-slate-800 dark:text-slate-100">{action.label}</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{action.hint}</p>
+                </Link>
+              );
+            })}
+          </div>
         </GlassCard>
       </section>
 

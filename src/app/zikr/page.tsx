@@ -6,7 +6,7 @@ export default function ZikrPage(): React.JSX.Element {
     <div>
       <SectionHeading
         title="Zikr & Spiritual Tools"
-        subtitle="Tasbih counter, duas, Hijri calendar, zakat estimation, Ramadan mode, and daily habit consistency."
+        subtitle="Guided tasbih, rotating duas, Hijri calendar, Ramadan controls, a richer zakat calculator, and daily spiritual consistency tools."
       />
       <ZikrTools />
     </div>

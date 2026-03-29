@@ -18,12 +18,59 @@ export type ParaReadPosition = {
   wordId: number;
 };
 
+export const TRACKED_PRAYER_NAMES = ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"] as const;
+
+export type TrackedPrayerName = (typeof TRACKED_PRAYER_NAMES)[number];
+export type PrayerCompletionDay = Record<TrackedPrayerName, boolean>;
+export type NotificationPrayerPrefs = Record<TrackedPrayerName, boolean>;
+
 function emptyIbadahDay(): IbadahDay {
   return {
     fajrOnTime: false,
     readQuran: false,
     makeDua: false,
     charity: false
+  };
+}
+
+function normalizeIbadahDay(day?: Partial<IbadahDay> | null): IbadahDay {
+  return {
+    fajrOnTime: Boolean(day?.fajrOnTime),
+    readQuran: Boolean(day?.readQuran),
+    makeDua: Boolean(day?.makeDua),
+    charity: Boolean(day?.charity)
+  };
+}
+
+function emptyPrayerCompletionDay(): PrayerCompletionDay {
+  return {
+    Fajr: false,
+    Dhuhr: false,
+    Asr: false,
+    Maghrib: false,
+    Isha: false
+  };
+}
+
+function buildPrayerCompletionDay(count = 0): PrayerCompletionDay {
+  const safeCount = Math.max(0, Math.min(TRACKED_PRAYER_NAMES.length, Math.floor(count)));
+  return TRACKED_PRAYER_NAMES.reduce((acc, prayer, index) => {
+    acc[prayer] = index < safeCount;
+    return acc;
+  }, emptyPrayerCompletionDay());
+}
+
+function countCompletedPrayers(day: PrayerCompletionDay): number {
+  return TRACKED_PRAYER_NAMES.filter((prayer) => day[prayer]).length;
+}
+
+function defaultNotificationPrayerPrefs(): NotificationPrayerPrefs {
+  return {
+    Fajr: true,
+    Dhuhr: true,
+    Asr: true,
+    Maghrib: true,
+    Isha: true
   };
 }
 
@@ -47,9 +94,13 @@ type AppState = {
   lastZikrDate?: string;
   dailyProgressDate?: string;
   prayersCompletedToday: number;
+  prayerCompletionByDate: Record<string, PrayerCompletionDay>;
   quranGoalPagesDaily: number;
   quranPagesReadToday: number;
   quranGoalDate?: string;
+  onboardingCompleted: boolean;
+  notificationLeadMinutes: number;
+  notificationPrayerPrefs: NotificationPrayerPrefs;
   ibadahByDate: Record<string, IbadahDay>;
   paraReadProgress: Record<number, ParaReadPosition>;
   notificationsEnabled: boolean;
@@ -66,6 +117,12 @@ type AppState = {
   adjustZikrCount: (delta: number) => void;
   resetDailyZikr: () => void;
   adjustPrayersCompleted: (delta: number) => void;
+  setPrayerCompleted: (prayer: TrackedPrayerName, completed: boolean) => void;
+  togglePrayerCompleted: (prayer: TrackedPrayerName) => void;
+  completeOnboarding: () => void;
+  resetOnboarding: () => void;
+  setNotificationLeadMinutes: (value: number) => void;
+  setNotificationPrayerEnabled: (prayer: TrackedPrayerName, enabled: boolean) => void;
   setQuranGoalPagesDaily: (value: number) => void;
   adjustQuranPagesRead: (delta: number) => void;
   ensureQuranProgressDate: () => void;
@@ -92,9 +149,13 @@ export const useAppStore = create<AppState>()(
       lastZikrDate: undefined,
       dailyProgressDate: undefined,
       prayersCompletedToday: 0,
+      prayerCompletionByDate: {},
       quranGoalPagesDaily: 4,
       quranPagesReadToday: 0,
       quranGoalDate: undefined,
+      onboardingCompleted: false,
+      notificationLeadMinutes: 10,
+      notificationPrayerPrefs: defaultNotificationPrayerPrefs(),
       ibadahByDate: {},
       paraReadProgress: {},
       notificationsEnabled: false,
@@ -173,13 +234,89 @@ export const useAppStore = create<AppState>()(
       adjustPrayersCompleted: (delta) =>
         set((state) => {
           const today = getLocalDateKey();
-          const current = state.dailyProgressDate === today ? state.prayersCompletedToday : 0;
-          const next = Math.max(0, Math.min(5, current + Math.floor(delta)));
+          const currentCount = state.dailyProgressDate === today ? state.prayersCompletedToday : 0;
+          const currentDay = state.prayerCompletionByDate[today] ?? buildPrayerCompletionDay(currentCount);
+          const step = Math.floor(delta);
+
+          if (step === 0) {
+            return {
+              dailyProgressDate: today,
+              prayersCompletedToday: currentCount,
+              prayerCompletionByDate: {
+                ...state.prayerCompletionByDate,
+                [today]: currentDay
+              }
+            };
+          }
+
+          const nextDay = { ...currentDay };
+          if (step > 0) {
+            const nextPrayer = TRACKED_PRAYER_NAMES.find((prayer) => !nextDay[prayer]);
+            if (nextPrayer) nextDay[nextPrayer] = true;
+          } else {
+            const previousPrayer = [...TRACKED_PRAYER_NAMES].reverse().find((prayer) => nextDay[prayer]);
+            if (previousPrayer) nextDay[previousPrayer] = false;
+          }
+
+          const next = countCompletedPrayers(nextDay);
           return {
             dailyProgressDate: today,
-            prayersCompletedToday: next
+            prayersCompletedToday: next,
+            prayerCompletionByDate: {
+              ...state.prayerCompletionByDate,
+              [today]: nextDay
+            }
           };
         }),
+      setPrayerCompleted: (prayer, completed) =>
+        set((state) => {
+          const today = getLocalDateKey();
+          const currentDay = state.prayerCompletionByDate[today] ?? buildPrayerCompletionDay(state.dailyProgressDate === today ? state.prayersCompletedToday : 0);
+          const nextDay = {
+            ...currentDay,
+            [prayer]: completed
+          };
+
+          return {
+            dailyProgressDate: today,
+            prayersCompletedToday: countCompletedPrayers(nextDay),
+            prayerCompletionByDate: {
+              ...state.prayerCompletionByDate,
+              [today]: nextDay
+            }
+          };
+        }),
+      togglePrayerCompleted: (prayer) =>
+        set((state) => {
+          const today = getLocalDateKey();
+          const currentDay = state.prayerCompletionByDate[today] ?? buildPrayerCompletionDay(state.dailyProgressDate === today ? state.prayersCompletedToday : 0);
+          const nextDay = {
+            ...currentDay,
+            [prayer]: !currentDay[prayer]
+          };
+
+          return {
+            dailyProgressDate: today,
+            prayersCompletedToday: countCompletedPrayers(nextDay),
+            prayerCompletionByDate: {
+              ...state.prayerCompletionByDate,
+              [today]: nextDay
+            }
+          };
+        }),
+      completeOnboarding: () => set({ onboardingCompleted: true }),
+      resetOnboarding: () => set({ onboardingCompleted: false }),
+      setNotificationLeadMinutes: (value) =>
+        set({
+          notificationLeadMinutes: Math.max(0, Math.min(60, Math.floor(value)))
+        }),
+      setNotificationPrayerEnabled: (prayer, enabled) =>
+        set((state) => ({
+          notificationPrayerPrefs: {
+            ...state.notificationPrayerPrefs,
+            [prayer]: enabled
+          }
+        })),
       setQuranGoalPagesDaily: (value) =>
         set({
           quranGoalPagesDaily: Math.max(1, Math.floor(value))
@@ -208,12 +345,30 @@ export const useAppStore = create<AppState>()(
       ensureDailyProgressDate: () =>
         set((state) => {
           const today = getLocalDateKey();
+          const todaysPrayerDay =
+            state.prayerCompletionByDate[today] ?? buildPrayerCompletionDay(state.dailyProgressDate === today ? state.prayersCompletedToday : 0);
+
           if (state.dailyProgressDate === today && state.quranGoalDate === today) {
-            return {};
+            return {
+              prayerCompletionByDate:
+                state.prayerCompletionByDate[today] && countCompletedPrayers(state.prayerCompletionByDate[today]) === state.prayersCompletedToday
+                  ? state.prayerCompletionByDate
+                  : {
+                      ...state.prayerCompletionByDate,
+                      [today]: todaysPrayerDay
+                    }
+            };
           }
+
+          const nextPrayerCompletionByDate = {
+            ...state.prayerCompletionByDate,
+            [today]: emptyPrayerCompletionDay()
+          };
+
           return {
             dailyProgressDate: today,
             prayersCompletedToday: 0,
+            prayerCompletionByDate: nextPrayerCompletionByDate,
             quranGoalDate: today,
             quranPagesReadToday: state.quranGoalDate === today ? state.quranPagesReadToday : 0
           };
@@ -228,7 +383,7 @@ export const useAppStore = create<AppState>()(
       toggleIbadahTask: (task) =>
         set((state) => {
           const today = getLocalDateKey();
-          const current = state.ibadahByDate[today] ?? emptyIbadahDay();
+          const current = normalizeIbadahDay(state.ibadahByDate[today] ?? emptyIbadahDay());
           const next = {
             ...current,
             [task]: !current[task]
