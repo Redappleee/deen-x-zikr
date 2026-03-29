@@ -36,6 +36,10 @@ type QuranComResponse = {
   };
 };
 
+function stripTags(value: string | undefined): string {
+  return (value ?? "").replace(/<[^>]+>/g, "").trim();
+}
+
 function normalizeAudioUrl(url: string | undefined): string {
   if (!url) return "";
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
@@ -75,19 +79,22 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const payload = await cachedJson<QuranComResponse>({
       url: `https://api.quran.com/api/v4/verses/by_juz/${id}?${query.toString()}`,
       revalidate: 86_400,
-      tags: [`para-${id}`]
+      tags: [`para-${id}`],
+      timeoutMs: 12_000
     });
 
     const verses = (payload.verses ?? []).map((verse) => ({
       id: verse.id,
       verseKey: normalizeVerseKey(verse.verse_key, verse.id),
       text: verse.text_uthmani ?? "",
-      words: (verse.words ?? []).map((word) => ({
+      words: (verse.words ?? [])
+        .filter((word) => (word.text_uthmani ?? word.text ?? "").trim().length > 0)
+        .map((word) => ({
         id: word.id,
         position: word.position,
         text: word.text_uthmani ?? word.text ?? "",
-        translation: word.translation?.text ?? "",
-        transliteration: word.transliteration?.text ?? "",
+        translation: stripTags(word.translation?.text),
+        transliteration: stripTags(word.transliteration?.text),
         audioUrl: normalizeAudioUrl(word.audio_url),
         charType: word.char_type_name ?? ""
       }))

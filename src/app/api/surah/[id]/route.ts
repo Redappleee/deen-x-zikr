@@ -24,6 +24,19 @@ type SurahPayload = {
   };
 };
 
+async function fetchEdition(id: number, edition: string, tag: string): Promise<SurahPayload | null> {
+  try {
+    return await cachedJson<SurahPayload>({
+      url: `https://api.alquran.cloud/v1/surah/${id}/${edition}`,
+      revalidate: 86_400,
+      tags: [tag],
+      timeoutMs: 12_000
+    });
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }): Promise<NextResponse> {
   const params = await context.params;
   const parsed = schema.safeParse({
@@ -40,32 +53,23 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   const { id, translation, tafsir, reciter } = parsed.data;
 
   try {
-    const [arabic, translated, tafsirPayload, audioPayload] = await Promise.all([
-      cachedJson<SurahPayload>({
-        url: `https://api.alquran.cloud/v1/surah/${id}/quran-uthmani`,
-        revalidate: 86_400,
-        tags: [`surah-${id}`]
-      }),
-      cachedJson<SurahPayload>({
-        url: `https://api.alquran.cloud/v1/surah/${id}/${translation}`,
-        revalidate: 86_400,
-        tags: [`surah-${id}-tr`]
-      }),
-      cachedJson<SurahPayload>({
-        url: `https://api.alquran.cloud/v1/surah/${id}/${tafsir}`,
-        revalidate: 86_400,
-        tags: [`surah-${id}-tafsir`]
-      }),
-      cachedJson<SurahPayload>({
-        url: `https://api.alquran.cloud/v1/surah/${id}/${reciter}`,
-        revalidate: 86_400,
-        tags: [`surah-${id}-audio`]
-      })
+    const arabic = await fetchEdition(id, "quran-uthmani", `surah-${id}`);
+    if (!arabic) {
+      return NextResponse.json({ error: "Failed to fetch surah text" }, { status: 502 });
+    }
+
+    const [translated, tafsirPayload, audioPayload] = await Promise.all([
+      fetchEdition(id, translation, `surah-${id}-tr-${translation}`),
+      fetchEdition(id, tafsir, `surah-${id}-tafsir-${tafsir}`),
+      fetchEdition(id, reciter, `surah-${id}-audio-${reciter}`)
     ]);
 
     const quranComTajweed = await fetch(
       `https://api.quran.com/api/v4/quran/verses/uthmani_tajweed?chapter_number=${id}&per_page=300`,
-      { next: { revalidate: 86_400, tags: [`surah-${id}-tajweed`] } }
+      {
+        next: { revalidate: 86_400, tags: [`surah-${id}-tajweed`] },
+        signal: AbortSignal.timeout(12_000)
+      }
     )
       .then(async (res) => {
         if (!res.ok) return null;
@@ -82,9 +86,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       number: ayah.numberInSurah,
       text: ayah.text,
       tajweedText: tajweedMap.get(ayah.numberInSurah) ?? ayah.text,
-      translation: translated.data.ayahs[index]?.text ?? "",
-      tafsir: tafsirPayload.data.ayahs[index]?.text ?? translated.data.ayahs[index]?.text ?? "",
-      audio: audioPayload.data.ayahs[index]?.audio ?? ""
+      translation: translated?.data.ayahs[index]?.text ?? "",
+      tafsir: tafsirPayload?.data.ayahs[index]?.text ?? translated?.data.ayahs[index]?.text ?? "",
+      audio: audioPayload?.data.ayahs[index]?.audio ?? ""
     }));
 
     return NextResponse.json({

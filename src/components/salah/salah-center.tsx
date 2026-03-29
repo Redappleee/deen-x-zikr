@@ -57,7 +57,8 @@ const MOSQUE_RADII = [
   { value: 3000, label: "3 km" },
   { value: 5000, label: "5 km" },
   { value: 10000, label: "10 km" },
-  { value: 20000, label: "20 km" }
+  { value: 20000, label: "20 km" },
+  { value: 30000, label: "30 km" }
 ] as const;
 
 const TODAY_PRAYER_NAMES = ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"] as const;
@@ -105,7 +106,7 @@ export function SalahCenter(): React.JSX.Element {
   const [pushTestBusy, setPushTestBusy] = useState(false);
   const [pushNotice, setPushNotice] = useState<string | null>(null);
   const [pushNoticeError, setPushNoticeError] = useState(false);
-  const [mosqueRadius, setMosqueRadius] = useState<number>(10000);
+  const [mosqueRadius, setMosqueRadius] = useState<number>(20000);
   const [nearbyMosques, setNearbyMosques] = useState<NearbyMosque[]>([]);
   const [mosquesNote, setMosquesNote] = useState<string | null>(null);
   const [mosquesLoading, setMosquesLoading] = useState(false);

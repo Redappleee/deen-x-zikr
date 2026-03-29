@@ -21,6 +21,7 @@ const FEATURE_PILLS = [
 ] as const;
 
 const STAR_COUNT = 22;
+const WELCOME_SEEN_KEY = "deen-x-zikr-welcome-seen";
 
 export function WelcomeIntro(): React.JSX.Element | null {
   const prefersReducedMotion = useReducedMotion();
@@ -37,6 +38,13 @@ export function WelcomeIntro(): React.JSX.Element | null {
 
   useEffect(() => {
     setMounted(true);
+    const alreadySeen = window.sessionStorage.getItem(WELCOME_SEEN_KEY) === "1";
+    if (alreadySeen) {
+      setVisible(false);
+      return;
+    }
+
+    window.sessionStorage.setItem(WELCOME_SEEN_KEY, "1");
     setVisible(true);
 
     const timer = window.setTimeout(() => {

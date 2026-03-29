@@ -7,7 +7,7 @@ const querySchema = z.object({
   lng: z.coerce.number().min(-180).max(180),
   method: z.coerce.number().int().min(1).max(25).default(3),
   date: z.string().regex(/^\d{2}-\d{2}-\d{4}$/).optional(),
-  radius: z.coerce.number().int().min(500).max(20000).default(10000)
+  radius: z.coerce.number().int().min(500).max(30000).default(20000)
 });
 
 type OverpassElement = {
@@ -248,7 +248,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     lng: request.nextUrl.searchParams.get("lng"),
     method: request.nextUrl.searchParams.get("method") ?? "3",
     date: request.nextUrl.searchParams.get("date") ?? undefined,
-    radius: request.nextUrl.searchParams.get("radius") ?? "3000"
+    radius: request.nextUrl.searchParams.get("radius") ?? "20000"
   });
 
   if (!parsed.success) {
@@ -268,8 +268,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const areaTimings = await fetchAreaPrayerTimes(lat, lng, method, date).catch(() => null);
 
     let rawElements = await fetchGeoapifyNearby(lat, lng, radius).catch(() => []);
-    if (rawElements.length < 3 && radius < 10000) {
-      const widerGeoapifyPlaces = await fetchGeoapifyNearby(lat, lng, Math.min(radius * 2, 10000)).catch(() => []);
+    if (rawElements.length < 3 && radius < 30000) {
+      const widerGeoapifyPlaces = await fetchGeoapifyNearby(lat, lng, Math.min(radius * 2, 30000)).catch(() => []);
       rawElements = [...rawElements, ...widerGeoapifyPlaces];
     }
     if (rawElements.length < 2) {

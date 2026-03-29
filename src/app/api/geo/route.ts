@@ -26,7 +26,33 @@ type NominatimReverseResult = {
   lat: string;
   lon: string;
   addresstype?: string;
+  address?: {
+    suburb?: string;
+    neighbourhood?: string;
+    village?: string;
+    town?: string;
+    city?: string;
+    county?: string;
+    state_district?: string;
+    state?: string;
+    country?: string;
+  };
 };
+
+function buildReverseLabel(data: NominatimReverseResult): string {
+  const address = data.address;
+  if (!address) return data.display_name;
+
+  const parts = [
+    address.suburb ?? address.neighbourhood ?? address.village,
+    address.city ?? address.town ?? address.county,
+    address.state_district ?? address.state,
+    address.country
+  ].filter(Boolean) as string[];
+
+  const deduped = parts.filter((part, index) => parts.indexOf(part) === index);
+  return deduped.slice(0, 3).join(", ") || data.display_name;
+}
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const ip = request.headers.get("x-forwarded-for") ?? "unknown";
@@ -50,7 +76,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({
         result: {
           id: data.place_id,
-          label: data.display_name,
+          label: buildReverseLabel(data),
           lat: Number(data.lat),
           lng: Number(data.lon),
           type: data.addresstype ?? "gps"

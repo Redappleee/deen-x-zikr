@@ -53,6 +53,8 @@ export default function ParaReaderPage(): React.JSX.Element {
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   const [showWordByWord, setShowWordByWord] = useState(true);
   const [showTransliteration, setShowTransliteration] = useState(false);
@@ -75,15 +77,24 @@ export default function ParaReaderPage(): React.JSX.Element {
     setPage(1);
     setHasMore(true);
     setVerses([]);
+    setError(null);
 
     fetch(`/api/quran/para/${paraId}?page=1&perPage=8`)
-      .then((res) => res.json())
-      .then((json: ParaApiResponse) => {
+      .then(async (res) => {
+        const json = (await res.json()) as ParaApiResponse & { error?: string };
+        if (!res.ok) {
+          throw new Error(json.error ?? "Unable to load this Para right now.");
+        }
         setVerses(json.verses ?? []);
         setHasMore(Boolean(json.pagination?.hasMore));
       })
+      .catch((fetchError: unknown) => {
+        setVerses([]);
+        setHasMore(false);
+        setError(fetchError instanceof Error ? fetchError.message : "Unable to load this Para right now.");
+      })
       .finally(() => setLoading(false));
-  }, [paraId]);
+  }, [paraId, retryKey]);
 
   useEffect(() => {
     const stored = paraReadProgress[paraId];
@@ -112,12 +123,18 @@ export default function ParaReaderPage(): React.JSX.Element {
     try {
       const nextPage = page + 1;
       const res = await fetch(`/api/quran/para/${paraId}?page=${nextPage}&perPage=8`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        const json = (await res.json()) as { error?: string };
+        throw new Error(json.error ?? "Unable to load more ayahs right now.");
+      }
       const json = (await res.json()) as ParaApiResponse;
 
       setVerses((prev) => [...prev, ...(json.verses ?? [])]);
       setHasMore(Boolean(json.pagination?.hasMore));
       setPage(nextPage);
+    } catch (fetchError: unknown) {
+      setError(fetchError instanceof Error ? fetchError.message : "Unable to load more ayahs right now.");
+      setHasMore(false);
     } finally {
       setLoadingMore(false);
     }
@@ -212,6 +229,17 @@ export default function ParaReaderPage(): React.JSX.Element {
               <motion.div animate={{ opacity: [0.4, 0.8, 0.4] }} className="h-full w-full rounded-2xl bg-emerald-100/60 dark:bg-emerald-900/30" transition={{ duration: 1.1, repeat: Infinity }} />
             </div>
           ))}
+        </div>
+      ) : error ? (
+        <div className="rounded-3xl border border-rose-200/70 bg-rose-50/80 p-5 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-200">
+          <p>{error}</p>
+          <button
+            className="mt-3 rounded-full border border-rose-200 px-3 py-1.5 text-xs text-rose-700 dark:border-rose-900/40 dark:text-rose-200"
+            onClick={() => setRetryKey((value) => value + 1)}
+            type="button"
+          >
+            Reload Para
+          </button>
         </div>
       ) : (
         <div>

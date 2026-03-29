@@ -85,26 +85,49 @@ export function QuranReader(): React.JSX.Element {
   const [activeAyah, setActiveAyah] = useState<number | null>(null);
   const [surahData, setSurahData] = useState<SurahPayload["surah"] | null>(null);
   const [authMessage, setAuthMessage] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
+  const [surahError, setSurahError] = useState<string | null>(null);
+  const [surahRetryKey, setSurahRetryKey] = useState(0);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const resumeRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setLoadingList(true);
+    setListError(null);
     fetch("/api/quran")
-      .then((res) => res.json())
-      .then((json: { surahs: SurahSummary[] }) => setSurahs(json.surahs ?? []))
+      .then(async (res) => {
+        const json = (await res.json()) as { surahs?: SurahSummary[]; error?: string };
+        if (!res.ok) {
+          throw new Error(json.error ?? "Unable to load Surahs right now.");
+        }
+        setSurahs(json.surahs ?? []);
+      })
+      .catch((error: unknown) => {
+        setSurahs([]);
+        setListError(error instanceof Error ? error.message : "Unable to load Surahs right now.");
+      })
       .finally(() => setLoadingList(false));
   }, []);
 
   useEffect(() => {
     setLoadingSurah(true);
+    setSurahError(null);
     fetch(`/api/surah/${selectedSurah}?translation=${translation}&tafsir=${tafsir}&reciter=${reciter}`)
-      .then((res) => res.json())
-      .then((json: SurahPayload) => setSurahData(json.surah))
+      .then(async (res) => {
+        const json = (await res.json()) as SurahPayload & { error?: string };
+        if (!res.ok || !json.surah) {
+          throw new Error(json.error ?? "Unable to load this Surah right now.");
+        }
+        setSurahData(json.surah);
+      })
+      .catch((error: unknown) => {
+        setSurahData(null);
+        setSurahError(error instanceof Error ? error.message : "Unable to load this Surah right now.");
+      })
       .finally(() => setLoadingSurah(false));
     setLastReadSurah(selectedSurah);
-  }, [selectedSurah, translation, tafsir, reciter, setLastReadSurah]);
+  }, [selectedSurah, translation, tafsir, reciter, setLastReadSurah, surahRetryKey]);
 
   const filteredSurahs = useMemo(() => {
     if (!surahSearch.trim()) return surahs;
@@ -198,6 +221,17 @@ export function QuranReader(): React.JSX.Element {
               <Loader2 className="h-4 w-4 animate-spin" />
               Loading surahs...
             </p>
+          ) : listError ? (
+            <div className="p-3 text-sm text-rose-600 dark:text-rose-300">
+              <p>{listError}</p>
+              <button
+                className="mt-3 rounded-full border border-rose-200 px-3 py-1.5 text-xs text-rose-700 dark:border-rose-900/40 dark:text-rose-200"
+                onClick={() => window.location.reload()}
+                type="button"
+              >
+                Reload Quran List
+              </button>
+            </div>
           ) : (
             filteredSurahs.map((surah) => (
               <button
@@ -241,8 +275,21 @@ export function QuranReader(): React.JSX.Element {
           </p>
         ) : null}
 
+        {!loadingSurah && surahError ? (
+          <div className="rounded-2xl border border-rose-200/70 bg-rose-50/80 p-4 text-sm text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-200">
+            <p>{surahError}</p>
+            <button
+              className="mt-3 rounded-full border border-rose-200 px-3 py-1.5 text-xs text-rose-700 dark:border-rose-900/40 dark:text-rose-200"
+              onClick={() => setSurahRetryKey((value) => value + 1)}
+              type="button"
+            >
+              Try Again
+            </button>
+          </div>
+        ) : null}
+
         <AnimatePresence mode="wait">
-          {surahData ? (
+          {surahData && !surahError ? (
             <motion.div
               animate={{ opacity: 1, y: 0 }}
               className="space-y-4"

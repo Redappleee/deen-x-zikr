@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Loader2, LocateFixed, MoonStar, Sun } from "lucide-react";
 import { GlassCard } from "@/components/shared/glass-card";
 import { PRAYER_METHODS } from "@/lib/constants";
@@ -9,7 +9,31 @@ import { useAppStore } from "@/store/use-app-store";
 
 type ReverseGeoPayload = {
   label?: string;
+  result?: {
+    label?: string;
+  };
 };
+
+function looksLikeRawLocationLabel(label: string | undefined): boolean {
+  if (!label) return true;
+  const trimmed = label.trim();
+  return (
+    /^-?\d+(\.\d+)?,\s*-?\d+(\.\d+)?$/.test(trimmed) ||
+    /^(?:\d{1,3}\.){3}\d{1,3}$/.test(trimmed) ||
+    trimmed.toLowerCase().includes("ip address")
+  );
+}
+
+function compactLocationLabel(label: string | undefined): string {
+  if (!label) return "Use your current location for accurate salah times and qibla.";
+  const parts = label
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const deduped = parts.filter((part, index) => parts.indexOf(part) === index);
+  if (deduped.length <= 3) return deduped.join(", ");
+  return deduped.slice(0, 3).join(", ");
+}
 
 export function SetupFlow(): React.JSX.Element | null {
   const onboardingCompleted = useAppStore((state) => state.onboardingCompleted);
@@ -32,6 +56,36 @@ export function SetupFlow(): React.JSX.Element | null {
     return Math.min(done, 3);
   }, [preferredLocation, prayerMethod]);
 
+  useEffect(() => {
+    if (!preferredLocation || !looksLikeRawLocationLabel(preferredLocation.label)) return;
+
+    let cancelled = false;
+
+    const refreshLabel = async () => {
+      try {
+        const res = await fetch(`/api/geo?lat=${preferredLocation.lat}&lng=${preferredLocation.lng}`);
+        if (!res.ok) return;
+
+        const json = (await res.json()) as ReverseGeoPayload;
+        const label = json.result?.label ?? json.label;
+        if (!label || cancelled) return;
+
+        setPreferredLocation({
+          ...preferredLocation,
+          label
+        });
+      } catch {
+        // Keep the saved fallback label if reverse geocoding fails.
+      }
+    };
+
+    void refreshLabel();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [preferredLocation, setPreferredLocation]);
+
   if (onboardingCompleted) return null;
 
   const detectLocation = () => {
@@ -53,8 +107,9 @@ export function SetupFlow(): React.JSX.Element | null {
           const res = await fetch(`/api/geo?lat=${lat}&lng=${lng}`);
           if (res.ok) {
             const json = (await res.json()) as ReverseGeoPayload;
-            if (json.label) {
-              label = json.label;
+            const resolvedLabel = json.result?.label ?? json.label;
+            if (resolvedLabel) {
+              label = resolvedLabel;
             }
           }
         } catch {
@@ -93,7 +148,7 @@ export function SetupFlow(): React.JSX.Element | null {
         <div className="rounded-3xl border border-white/70 bg-white/60 p-4 backdrop-blur dark:border-white/10 dark:bg-black/10">
           <p className="text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">1. Location</p>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-            {preferredLocation ? preferredLocation.label : "Use your current location for accurate salah times and qibla."}
+            {preferredLocation ? compactLocationLabel(preferredLocation.label) : "Use your current location for accurate salah times and qibla."}
           </p>
           <button
             className="mt-4 inline-flex items-center gap-2 rounded-full bg-emerald-500 px-4 py-2 text-sm font-medium text-white"
