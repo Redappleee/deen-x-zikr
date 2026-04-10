@@ -98,6 +98,16 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   );
 }
 
+// When deployed on Netlify, derive AUTH_URL from the Netlify-provided URL
+// environment variable so NextAuth redirects to the real site instead of localhost.
+if (
+  process.env.URL &&
+  (!process.env.AUTH_URL || process.env.AUTH_URL.includes("localhost")) &&
+  (!process.env.NEXTAUTH_URL || process.env.NEXTAUTH_URL.includes("localhost"))
+) {
+  process.env.AUTH_URL = process.env.URL;
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: hasDatabase
     ? MongoDBAdapter(() => getMongoClientPromise(), {
