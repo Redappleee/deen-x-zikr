@@ -93,3 +93,4 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   return NextResponse.json({ success: true, total: subscriptions.length, sent, skipped, expired });
 }
+export const POST = GET;

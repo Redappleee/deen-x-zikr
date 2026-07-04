@@ -1,8 +1,3 @@
 {
-  "crons": [
-    {
-      "path": "/api/cron/prayer-reminders",
-      "schedule": "*/10 * * * *"
-    }
-  ]
+  "version": 2
 }
