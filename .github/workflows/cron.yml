@@ -1,0 +1,18 @@
+name: 10-Minute Prayer Reminders Trigger
+
+on:
+  schedule:
+    # Triggers every 10 minutes
+    - cron: '*/10 * * * *'
+  # Allows you to trigger it manually from the GitHub dashboard for testing
+  workflow_dispatch:
+
+jobs:
+  trigger-cron:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Vercel Endpoint
+        run: |
+          curl -X POST https://deen-x-zikr.vercel.app/api/cron/prayer-reminders \
+          -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+          -H "Content-Type: application/json"
